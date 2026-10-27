@@ -1,0 +1,58 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "smart-p1sc"
+version = "0.1.0"
+description = "Local print anomaly monitor and controller for Bambu Lab P1S"
+requires-python = ">=3.8"
+dependencies = []
+
+[project.optional-dependencies]
+mqtt = ["paho-mqtt>=1.6,<3"]
+vision = [
+  "numpy>=1.24,<1.25; python_version < '3.9'",
+  "Pillow>=10,<11",
+  "onnxruntime>=1.15,<1.17; python_version < '3.9'",
+  "numpy>=1.26; python_version >= '3.9'",
+  "onnxruntime>=1.17; python_version >= '3.9'",
+]
+dev = [
+  "pytest>=7,<9",
+  "ruff>=0.4",
+  "mypy>=1.8",
+  "types-PyYAML>=6",
+]
+training = [
+  "ultralytics>=8.0",
+  "onnx>=1.13",
+  "onnxruntime>=1.15,<1.17; python_version < '3.9'",
+  "onnxruntime>=1.17; python_version >= '3.9'",
+]
+
+[project.scripts]
+smart-p1sc = "smart_p1_sc.cli:main"
+smart-p1scd = "smart_p1_sc.daemon:main"
+smart-p1sc-probe = "smart_p1_sc.diagnostics:main"
+smart-p1sc-model = "smart_p1_sc.model_tool:main"
+
+[tool.setuptools.packages.find]
+include = ["smart_p1_sc*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py38"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["UP006", "UP007", "UP035"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.mypy]
+python_version = "3.8"
+ignore_missing_imports = true
+check_untyped_defs = true

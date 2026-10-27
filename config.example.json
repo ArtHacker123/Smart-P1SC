@@ -1,0 +1,97 @@
+{
+  "printer": {
+    "host": "192.168.1.42",
+    "serial": "01P00A000000000",
+    "access_code_env": "SMART_P1SC_ACCESS_CODE",
+    "access_code_file": null,
+    "lan_only": true
+  },
+  "camera": {
+    "port": 6000,
+    "connect_timeout_seconds": 10,
+    "read_timeout_seconds": 15,
+    "reconnect_min_seconds": 1,
+    "reconnect_max_seconds": 30,
+    "frame_timeout_seconds": 10,
+    "degraded_after_seconds": 15,
+    "stall_notify_seconds": 60,
+    "ring_buffer_frames": 120
+  },
+  "mqtt": {
+    "port": 8883,
+    "keepalive_seconds": 60,
+    "command_timeout_seconds": 10,
+    "command_retries": 3,
+    "topic_prefix": "device"
+  },
+  "detection": {
+    "enabled": true,
+    "backend": "auto",
+    "candidate_threshold": 0.35,
+    "confirm_threshold": 0.6,
+    "window_frames": 10,
+    "min_positive_frames": 3,
+    "spatial_iou_threshold": 0.2,
+    "suppression_seconds": 300,
+    "first_layer_max": 1,
+    "model_path": "models/spaghetti.onnx",
+    "model_version": "spaghetti-v1",
+    "p1_threshold": 0.8,
+    "p2_threshold": 0.6,
+    "first_layer_min_area_ratio": 0.15,
+    "suppression_growth_ratio": 0.3,
+    "suppression_confidence_delta": 0.15,
+    "min_nozzle_temp_c": 150,
+    "input_width": 640,
+    "input_height": 640,
+    "input_layout": "nchw",
+    "channel_order": "rgb",
+    "normalize": true,
+    "output_format": "auto",
+    "class_count": 3,
+    "class_map": {
+      "0": "spaghetti",
+      "1": "first_layer_detachment",
+      "2": "structural_anomaly"
+    },
+    "score_threshold": 0.25,
+    "nms_iou_threshold": 0.45,
+    "class_agnostic_nms": false,
+    "max_detections": 100,
+    "box_coordinates": "pixels",
+    "providers": ["CPUExecutionProvider"]
+  },
+  "hold": {
+    "nozzle_temperature_c": 150,
+    "keep_bed_temperature": true,
+    "max_wait_minutes": 60,
+    "reminder_minutes": [10, 50],
+    "fail_safe_stop_on_pause_failure": true
+  },
+  "storage": {
+    "database_path": "data/smart_p1sc.sqlite3",
+    "media_dir": "data/media",
+    "retention_days": 30,
+    "normal_retention_days": 7,
+    "min_free_disk_mb": 512,
+    "filmstrip_before": 10,
+    "filmstrip_after": 10
+  },
+  "http": {
+    "host": "127.0.0.1",
+    "port": 8787,
+    "token_env": "SMART_P1SC_API_TOKEN"
+  },
+  "openclaw": {
+    "hook_url": "http://127.0.0.1:18789/hooks/print-anomaly",
+    "token_env": "SMART_P1SC_OPENCLAW_TOKEN",
+    "timeout_seconds": 10,
+    "retries": 3,
+    "feishu_target": "user:me"
+  },
+  "logging": {
+    "level": "INFO",
+    "json": true,
+    "file_path": "data/smart_p1sc.log"
+  }
+}

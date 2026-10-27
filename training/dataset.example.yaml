@@ -1,0 +1,9 @@
+path: datasets/3d-printer-failure
+train: images/train
+val: images/val
+test: images/test
+nc: 3
+names:
+  0: spaghetti
+  1: first_layer_detachment
+  2: structural_anomaly

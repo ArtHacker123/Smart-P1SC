@@ -1,0 +1,14 @@
+{
+  tools: {
+    exec: {
+      mode: "allowlist",
+      host: "gateway",
+      strictInlineEval: true
+    }
+  },
+  agents: {
+    defaults: {
+      skills: ["smart-p1sc"]
+    }
+  }
+}
