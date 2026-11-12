@@ -14,6 +14,7 @@ mqtt = ["paho-mqtt>=1.6,<3"]
 vision = [
   "numpy>=1.24,<1.25; python_version < '3.9'",
   "Pillow>=10,<11",
+  "opencv-python-headless>=4.8",
   "onnxruntime>=1.15,<1.17; python_version < '3.9'",
   "numpy>=1.26; python_version >= '3.9'",
   "onnxruntime>=1.17; python_version >= '3.9'",

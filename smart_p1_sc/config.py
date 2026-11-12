@@ -142,6 +142,7 @@ class DetectionConfig:
     input_layout: str = "nchw"
     channel_order: str = "rgb"
     normalize: bool = True
+    resize_mode: str = "letterbox"
     output_format: str = "auto"
     class_count: int = 0
     class_map: Dict[str, str] = field(default_factory=dict)
@@ -164,6 +165,10 @@ class DetectionConfig:
         if self.channel_order not in ("rgb", "bgr"):
             raise ConfigError(
                 "unsupported detection.channel_order: {}".format(self.channel_order)
+            )
+        if self.resize_mode not in ("letterbox", "stretch"):
+            raise ConfigError(
+                "unsupported detection.resize_mode: {}".format(self.resize_mode)
             )
         if self.output_format not in (
             "auto",
@@ -237,6 +242,7 @@ class DetectionConfig:
             input_layout=str(data.get("input_layout", "nchw")).lower(),
             channel_order=str(data.get("channel_order", "rgb")).lower(),
             normalize=bool(data.get("normalize", True)),
+            resize_mode=str(data.get("resize_mode", "letterbox")).lower(),
             output_format=str(data.get("output_format", "auto")).lower(),
             class_count=int(data.get("class_count", 0)),
             class_map=class_map,

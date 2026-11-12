@@ -119,6 +119,7 @@ def test_app_config_defaults_are_valid():
     assert config.hold.max_wait_minutes == 60.0
     assert config.detection.enabled is True
     assert config.detection.backend == "null"
+    assert config.detection.resize_mode == "letterbox"
     assert config.detection.providers == ["CPUExecutionProvider"]
 
 
@@ -154,5 +155,11 @@ def test_load_config_onnx_detection_settings(tmp_path):
 
 def test_invalid_detection_backend_raises(tmp_path):
     path = write_config(tmp_path, {"detection": {"backend": "torch"}})
+    with pytest.raises(ConfigError):
+        load_config(str(path))
+
+
+def test_invalid_resize_mode_raises(tmp_path):
+    path = write_config(tmp_path, {"detection": {"resize_mode": "crop"}})
     with pytest.raises(ConfigError):
         load_config(str(path))

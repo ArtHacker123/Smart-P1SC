@@ -22,6 +22,11 @@ try:
 except ImportError:
     Image = None  # type: ignore
 
+try:
+    import cv2
+except ImportError:
+    cv2 = None  # type: ignore
+
 
 class DetectorError(ConfigError):
     pass
@@ -98,6 +103,10 @@ class OnnxDetector:
         self.input_name = self.input.name
         self.output_name = session.get_outputs()[0].name
         self.input_width, self.input_height = _input_size(self.input.shape, config)
+        if (config.resize_mode or "letterbox").lower() == "letterbox" and cv2 is None:
+            raise DetectorError(
+                "opencv-python-headless is required for resize_mode=letterbox"
+            )
         self._last_error_at: Optional[float] = None
 
     def detect(
@@ -105,7 +114,7 @@ class OnnxDetector:
     ) -> List[Candidate]:
         if not frame.jpeg:
             return []
-        tensor = self.preprocess(frame.jpeg)
+        tensor, image_transform = self.prepare_input(frame.jpeg)
         try:
             outputs = self.session.run([self.output_name], {self.input_name: tensor})
         except Exception:
@@ -122,19 +131,74 @@ class OnnxDetector:
             self.class_map,
             input_width=self.input_width,
             input_height=self.input_height,
+            image_transform=image_transform,
         )
 
     def preprocess(self, jpeg: bytes) -> Any:
+        tensor, _ = self.prepare_input(jpeg)
+        return tensor
+
+    def prepare_input(
+        self, jpeg: bytes
+    ) -> Tuple[Any, Optional[Tuple[float, float, float, int, int]]]:
+        mode = (self.config.resize_mode or "letterbox").lower()
+        if mode == "stretch":
+            return self._preprocess_stretch(jpeg), None
+        return self._preprocess_letterbox(jpeg)
+
+    def _preprocess_stretch(self, jpeg: bytes) -> Any:
         image = Image.open(io.BytesIO(jpeg)).convert("RGB")
         image = image.resize((self.input_width, self.input_height), Image.BILINEAR)
-        array = np.asarray(image, dtype=np.float32)
+        return self._to_tensor(np.asarray(image))
+
+    def _preprocess_letterbox(
+        self, jpeg: bytes
+    ) -> Tuple[Any, Tuple[float, float, float, int, int]]:
+        if cv2 is None:
+            raise DetectorError(
+                "opencv-python-headless is required for resize_mode=letterbox"
+            )
+        buffer = np.frombuffer(jpeg, dtype=np.uint8)
+        image = cv2.imdecode(buffer, cv2.IMREAD_COLOR)
+        if image is None:
+            raise DetectorError("failed to decode frame image")
+        height, width = image.shape[:2]
+        scale = min(self.input_height / height, self.input_width / width)
+        new_width = int(round(width * scale))
+        new_height = int(round(height * scale))
+        if (new_width, new_height) != (width, height):
+            image = cv2.resize(
+                image, (new_width, new_height), interpolation=cv2.INTER_LINEAR
+            )
+        pad_width = self.input_width - new_width
+        pad_height = self.input_height - new_height
+        left = int(round(pad_width / 2.0 - 0.1))
+        right = int(round(pad_width / 2.0 + 0.1))
+        top = int(round(pad_height / 2.0 - 0.1))
+        bottom = int(round(pad_height / 2.0 + 0.1))
+        if any((left, right, top, bottom)):
+            image = cv2.copyMakeBorder(
+                image,
+                top,
+                bottom,
+                left,
+                right,
+                cv2.BORDER_CONSTANT,
+                value=(114, 114, 114),
+            )
+        image = image[:, :, ::-1]
+        transform = (scale, float(left), float(top), width, height)
+        return self._to_tensor(image), transform
+
+    def _to_tensor(self, array: Any) -> Any:
+        array = np.asarray(array, dtype=np.float32)
         if self.config.normalize:
             array = array / 255.0
         if (self.config.channel_order or "rgb").lower() == "bgr":
             array = array[:, :, ::-1]
         if (self.config.input_layout or "nchw").lower() == "nchw":
             array = np.transpose(array, (2, 0, 1))
-        return np.expand_dims(array, 0)
+        return np.ascontiguousarray(np.expand_dims(array, 0), dtype=np.float32)
 
 
 def decode_output(
@@ -144,6 +208,7 @@ def decode_output(
     class_map: Optional[Dict[int, str]] = None,
     input_width: Optional[int] = None,
     input_height: Optional[int] = None,
+    image_transform: Optional[Tuple[float, float, float, int, int]] = None,
 ) -> List[Candidate]:
     _require_vision_dependencies()
     if isinstance(outputs, (list, tuple)):
@@ -189,12 +254,16 @@ def decode_output(
     if boxes.size == 0:
         return []
 
+    input_width = int(input_width or config.input_width)
+    input_height = int(input_height or config.input_height)
+    coordinates = _box_coordinates(boxes, config)
     boxes = _normalize_boxes(
         boxes,
         config,
         output_format,
-        int(input_width or config.input_width),
-        int(input_height or config.input_height),
+        input_width,
+        input_height,
+        coordinates,
     )
     valid = (boxes[:, 2] > boxes[:, 0]) & (boxes[:, 3] > boxes[:, 1])
     boxes = boxes[valid]
@@ -212,13 +281,22 @@ def decode_output(
     )
     max_detections = max(0, int(config.max_detections))
     keep_indices = keep_indices[:max_detections]
+    if coordinates == "pixels":
+        boxes = _frame_boxes(
+            boxes[keep_indices],
+            image_transform,
+            input_width,
+            input_height,
+        )
+    else:
+        boxes = boxes[keep_indices]
 
     candidates: List[Candidate] = []
-    for index in keep_indices:
+    for position, index in enumerate(keep_indices):
         kind = mapping.get(int(class_ids[index]))
         if kind is None:
             continue
-        bbox = tuple(float(value) for value in boxes[index])
+        bbox = tuple(float(value) for value in boxes[position])
         candidates.append(
             Candidate(
                 kind=kind,
@@ -342,17 +420,24 @@ def _class_count(config: DetectionConfig, mapping: Dict[int, str]) -> int:
     return max(mapping) + 1
 
 
+def _box_coordinates(boxes: Any, config: DetectionConfig) -> str:
+    coordinates = (config.box_coordinates or "auto").lower()
+    if coordinates == "auto":
+        coordinates = "pixels" if float(np.max(boxes)) > 1.5 else "normalized"
+    return coordinates
+
+
 def _normalize_boxes(
     boxes: Any,
     config: DetectionConfig,
     output_format: str,
     input_width: int,
     input_height: int,
+    coordinates: Optional[str] = None,
 ) -> Any:
     boxes = np.asarray(boxes, dtype=np.float32).copy()
-    coordinates = (config.box_coordinates or "auto").lower()
-    if coordinates == "auto":
-        coordinates = "pixels" if float(np.max(boxes)) > 1.5 else "normalized"
+    if coordinates is None:
+        coordinates = _box_coordinates(boxes, config)
 
     if output_format == "cxcywh_object_class" or output_format == "cxcywh_class":
         if coordinates == "pixels":
@@ -376,6 +461,29 @@ def _normalize_boxes(
         boxes[:, 1] /= float(input_height)
         boxes[:, 3] /= float(input_height)
 
+    boxes[:, 0:4:2] = np.clip(boxes[:, 0:4:2], 0.0, 1.0)
+    boxes[:, 1:4:2] = np.clip(boxes[:, 1:4:2], 0.0, 1.0)
+    return boxes
+
+
+def _frame_boxes(
+    boxes: Any,
+    transform: Optional[Tuple[float, float, float, int, int]],
+    input_width: int,
+    input_height: int,
+) -> Any:
+    boxes = np.asarray(boxes, dtype=np.float32).copy()
+    if transform is None or boxes.size == 0:
+        return boxes
+    scale, pad_x, pad_y, original_width, original_height = transform
+    if scale <= 0 or original_width <= 0 or original_height <= 0:
+        return boxes
+    boxes[:, 0:4:2] = (
+        boxes[:, 0:4:2] * float(input_width) - pad_x
+    ) / scale / float(original_width)
+    boxes[:, 1:4:2] = (
+        boxes[:, 1:4:2] * float(input_height) - pad_y
+    ) / scale / float(original_height)
     boxes[:, 0:4:2] = np.clip(boxes[:, 0:4:2], 0.0, 1.0)
     boxes[:, 1:4:2] = np.clip(boxes[:, 1:4:2], 0.0, 1.0)
     return boxes

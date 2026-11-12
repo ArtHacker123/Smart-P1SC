@@ -83,7 +83,7 @@ python -m pip install -e ".[training]"
 依赖说明：
 
 - `mqtt`：`paho-mqtt`，连接打印机 MQTT。
-- `vision`：Pillow、NumPy、ONNX Runtime，运行检测与快照。
+- `vision`：Pillow、NumPy、OpenCV（headless）、ONNX Runtime，运行检测与快照。
 - `training`：Ultralytics、ONNX、ONNX Runtime，训练与导出。
 - `dev`：pytest、ruff、mypy、PyYAML 类型存根。
 
@@ -169,6 +169,7 @@ python -c "import secrets; print(secrets.token_urlsafe(32))"
     "input_layout": "nchw",
     "channel_order": "rgb",
     "normalize": true,
+    "resize_mode": "letterbox",
     "output_format": "auto",
     "class_count": 3,
     "class_map": {
@@ -189,6 +190,13 @@ python -c "import secrets; print(secrets.token_urlsafe(32))"
 - `null`：关闭视觉检测，仅保留摄像头、遥测与事件接口。
 
 `box_coordinates` 可选 `auto`、`normalized`、`pixels`。当前 3 类自训练 YOLO 导出建议使用 `pixels`，具体以 `smart-p1sc-model inspect` 的输出为准。
+
+`resize_mode` 可选值：
+
+- `letterbox`（默认）：保持宽高比缩放到模型输入尺寸，空白处填充灰边，再把检测框映射回原图坐标。与 Ultralytics 推理一致，推荐用于非正方形摄像头画面。
+- `stretch`：直接拉伸到模型输入尺寸，不保持宽高比。仅在模型训练时也使用拉伸预处理时才应选择。
+
+`letterbox` 使用 OpenCV 的 `INTER_LINEAR` 重采样，与 Ultralytics 完全对齐，因此同一模型、同一张图应得到相同结果。
 
 ## 快速检查
 
@@ -414,7 +422,7 @@ smart-p1sc-model check `
   --class-map "3=spaghetti,4=spaghetti,7=first_layer_detachment"
 ```
 
-`--class-count` 用于正确解析模型输出；未提供时按 `class-map` 的最大索引推断。`inspect` 会输出输入/输出形状和建议配置。当前 YOLOv8 3 类模型常见输出为 `[1, 7, 84]`，推荐 `output_format=cxcywh_class`、`box_coordinates=pixels`、`class_count=3`。
+`--class-count` 用于正确解析模型输出；未提供时按 `class-map` 的最大索引推断。`check` 默认使用 `letterbox` 预处理，与 Ultralytics 一致；如需拉伸预处理可加 `--resize-mode stretch`。`inspect` 会输出输入/输出形状和建议配置。当前 YOLOv8 3 类模型常见输出为 `[1, 7, 84]`，推荐 `output_format=cxcywh_class`、`box_coordinates=pixels`、`class_count=3`。
 
 ### 部署
 

@@ -47,6 +47,7 @@
     "input_layout": "nchw",
     "channel_order": "rgb",
     "normalize": true,
+    "resize_mode": "letterbox",
     "output_format": "auto",
     "class_count": 3,
     "class_map": {

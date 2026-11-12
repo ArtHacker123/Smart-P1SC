@@ -533,6 +533,7 @@ def check_image(args: argparse.Namespace) -> Dict[str, Any]:
         input_layout=str((metadata or {}).get("input_layout") or "nchw"),
         channel_order=str((metadata or {}).get("channel_order") or "rgb"),
         normalize=True,
+        resize_mode=str(getattr(args, "resize_mode", "letterbox") or "letterbox"),
         output_format="auto",
         class_count=class_count,
         class_map=class_map,
@@ -625,6 +626,12 @@ def _build_parser() -> argparse.ArgumentParser:
         help="model output class count; defaults to max class-map index + 1",
     )
     check.add_argument("--class-map", default="")
+    check.add_argument(
+        "--resize-mode",
+        choices=("letterbox", "stretch"),
+        default="letterbox",
+        help="preprocess mode; letterbox matches Ultralytics inference",
+    )
     check.add_argument("--score-threshold", type=float, default=0.25)
     check.add_argument("--nms-iou-threshold", type=float, default=0.45)
     return parser

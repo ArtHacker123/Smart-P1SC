@@ -82,6 +82,65 @@ def test_preprocess_builds_normalized_rgb_nchw_tensor():
     assert 0.0 <= float(tensor.min()) <= float(tensor.max()) <= 1.0
 
 
+def test_preprocess_letterbox_pads_non_square_frame():
+    detector = OnnxDetector(FakeSession(np.zeros((1, 1, 6))), make_config())
+    tensor = detector.preprocess(make_frame(width=80, height=40, color=(255, 0, 0)).jpeg)
+    assert tensor.shape == (1, 3, 64, 64)
+    # 80x40 -> scale 0.8 -> 64x32, padded 16px top and bottom with gray 114.
+    assert tensor[0, 0, 0, 32] == pytest.approx(114 / 255.0, abs=0.02)
+    assert tensor[0, 1, 0, 32] == pytest.approx(114 / 255.0, abs=0.02)
+    assert tensor[0, 2, 0, 32] == pytest.approx(114 / 255.0, abs=0.02)
+    assert tensor[0, 0, 32, 32] > 0.9
+    assert tensor[0, 1, 32, 32] < 0.1
+    assert tensor[0, 2, 32, 32] < 0.1
+
+
+def test_letterbox_requires_opencv(monkeypatch):
+    monkeypatch.setattr("smart_p1_sc.onnx_detector.cv2", None)
+    with pytest.raises(DetectorError):
+        OnnxDetector(FakeSession(np.zeros((1, 1, 6))), make_config())
+
+    detector = OnnxDetector(
+        FakeSession(np.zeros((1, 1, 6))),
+        make_config(resize_mode="stretch"),
+    )
+    assert detector.preprocess(make_frame().jpeg).shape == (1, 3, 64, 64)
+
+
+def test_letterbox_boxes_are_mapped_back_to_frame_coordinates():
+    output = np.array(
+        [[[32.0, 32.0, 64.0, 32.0, 0.9, 0.0]]], dtype=np.float32
+    )
+    detector = OnnxDetector(
+        FakeSession(output),
+        make_config(
+            output_format="cxcywh_class",
+            box_coordinates="pixels",
+            resize_mode="letterbox",
+        ),
+    )
+    candidates = detector.detect(make_frame(width=80, height=40), None)
+    assert len(candidates) == 1
+    assert candidates[0].bbox == pytest.approx((0.0, 0.0, 1.0, 1.0))
+
+
+def test_stretch_mode_keeps_full_frame_normalized_boxes():
+    output = np.array(
+        [[[32.0, 32.0, 64.0, 64.0, 0.9, 0.0]]], dtype=np.float32
+    )
+    detector = OnnxDetector(
+        FakeSession(output),
+        make_config(
+            output_format="cxcywh_class",
+            box_coordinates="pixels",
+            resize_mode="stretch",
+        ),
+    )
+    candidates = detector.detect(make_frame(width=80, height=40), None)
+    assert len(candidates) == 1
+    assert candidates[0].bbox == pytest.approx((0.0, 0.0, 1.0, 1.0))
+
+
 def test_preprocess_uses_static_model_shape_and_bgr():
     detector = OnnxDetector(
         FakeSession(np.zeros((1, 1, 6)), input_shape=[1, 3, 32, 48]),

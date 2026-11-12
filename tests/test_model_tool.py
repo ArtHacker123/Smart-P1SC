@@ -245,12 +245,14 @@ def test_check_image_uses_explicit_class_count(tmp_path, monkeypatch):
         class_map="3=spaghetti,4=spaghetti",
         class_count=9,
         imgsz=320,
+        resize_mode="stretch",
         score_threshold=0.25,
         nms_iou_threshold=0.45,
     )
     result = check_image(args)
     assert result["candidate_count"] == 0
     assert seen["config"].class_count == 9
+    assert seen["config"].resize_mode == "stretch"
     assert seen["config"].class_map == {"3": "spaghetti", "4": "spaghetti"}
 
 
