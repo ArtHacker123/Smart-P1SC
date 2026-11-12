@@ -237,7 +237,9 @@ def _class_map(config: DetectionConfig) -> Dict[int, str]:
         try:
             index = int(key)
         except (TypeError, ValueError):
-            raise DetectorError("class_map key is not an integer: {}".format(key))
+            raise DetectorError(
+                "class_map key is not an integer: {}".format(key)
+            ) from None
         if index < 0:
             raise DetectorError("class_map key must be non-negative: {}".format(key))
         kind = str(value)
@@ -283,6 +285,7 @@ def _prepare_matrix(output: Any, config: DetectionConfig) -> Tuple[Any, str]:
 
     output_format = (config.output_format or "auto").lower()
     class_count = _class_count(config, _class_map(config))
+    matrix = _orient_matrix(matrix, output_format, class_count)
     if output_format != "auto":
         return matrix, output_format
 
@@ -303,6 +306,25 @@ def _prepare_matrix(output: Any, config: DetectionConfig) -> Tuple[Any, str]:
             tuple(matrix.shape)
         )
     )
+
+
+def _orient_matrix(matrix: Any, output_format: str, class_count: int) -> Any:
+    if output_format == "xyxy_score_class":
+        expected_columns = 6
+    elif output_format == "cxcywh_object_class" and class_count > 0:
+        expected_columns = 5 + class_count
+    elif output_format == "cxcywh_class" and class_count > 0:
+        expected_columns = 4 + class_count
+    else:
+        expected_columns = None
+
+    if (
+        expected_columns is not None
+        and matrix.shape[1] != expected_columns
+        and matrix.shape[0] == expected_columns
+    ):
+        return matrix.T
+    return matrix
 
 
 def _looks_like_xyxy_score_class(matrix: Any) -> bool:

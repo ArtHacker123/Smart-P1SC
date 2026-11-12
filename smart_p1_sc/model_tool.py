@@ -513,6 +513,18 @@ def check_image(args: argparse.Namespace) -> Dict[str, Any]:
     imgsz = args.imgsz
     if imgsz <= 0:
         imgsz = int((metadata or {}).get("input_width") or 640)
+    max_class_index = max(int(key) for key in class_map)
+    class_count = int(getattr(args, "class_count", 0) or 0)
+    if class_count <= 0:
+        class_count = max_class_index + 1
+    elif max_class_index >= class_count:
+        raise ModelToolError(
+            "invalid_class_count",
+            "class count {} does not cover class-map index {}".format(
+                class_count, max_class_index
+            ),
+            EXIT_INVALID,
+        )
     config = DetectionConfig(
         backend="onnx",
         model_path=str(model_path),
@@ -522,7 +534,7 @@ def check_image(args: argparse.Namespace) -> Dict[str, Any]:
         channel_order=str((metadata or {}).get("channel_order") or "rgb"),
         normalize=True,
         output_format="auto",
-        class_count=max(int(key) for key in class_map) + 1,
+        class_count=class_count,
         class_map=class_map,
         score_threshold=args.score_threshold,
         nms_iou_threshold=args.nms_iou_threshold,
@@ -606,6 +618,12 @@ def _build_parser() -> argparse.ArgumentParser:
     check.add_argument("--model", required=True)
     check.add_argument("--image", required=True)
     check.add_argument("--imgsz", type=int, default=0)
+    check.add_argument(
+        "--class-count",
+        type=int,
+        default=0,
+        help="model output class count; defaults to max class-map index + 1",
+    )
     check.add_argument("--class-map", default="")
     check.add_argument("--score-threshold", type=float, default=0.25)
     check.add_argument("--nms-iou-threshold", type=float, default=0.45)

@@ -127,6 +127,21 @@ def test_detects_transposed_yolov8_class_output():
     assert candidates[1].confidence == pytest.approx(0.7)
 
 
+def test_explicit_format_still_transposes_channel_first_output():
+    output = np.zeros((1, 6, 2), dtype=np.float32)
+    output[0, :, 0] = [0.5, 0.5, 0.2, 0.2, 0.8, 0.1]
+    output[0, :, 1] = [0.2, 0.3, 0.1, 0.1, 0.1, 0.7]
+    candidates = decode_output(
+        output, make_config(output_format="cxcywh_class"), 7
+    )
+    assert len(candidates) == 2
+    assert candidates[0].kind == "spaghetti"
+    assert candidates[0].bbox == pytest.approx((0.4, 0.4, 0.6, 0.6))
+    assert candidates[0].confidence == pytest.approx(0.8)
+    assert candidates[1].kind == "first_layer_detachment"
+    assert candidates[1].confidence == pytest.approx(0.7)
+
+
 def test_detects_yolov5_objectness_output():
     output = np.array(
         [[[0.5, 0.5, 0.2, 0.2, 0.8, 0.9, 0.1]]], dtype=np.float32

@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import yaml
@@ -8,6 +9,7 @@ from smart_p1_sc.model_tool import (
     ModelToolError,
     _dataset_class_names,
     _normalize_dataset,
+    check_image,
     class_map_from_names,
     export_onnx,
     inspect_model,
@@ -217,3 +219,55 @@ def test_inspect_model_rejects_multiple_outputs(tmp_path, monkeypatch):
     )
     with pytest.raises(ModelToolError):
         inspect_model(model)
+
+
+def test_check_image_uses_explicit_class_count(tmp_path, monkeypatch):
+    model = tmp_path / "model.onnx"
+    model.write_bytes(b"model")
+    image = tmp_path / "test.jpg"
+    image.write_bytes(b"\xff\xd8x\xff\xd9")
+    seen = {}
+
+    class FakeDetector:
+        def detect(self, frame, snapshot):
+            return []
+
+    def fake_create_detector(config):
+        seen["config"] = config
+        return FakeDetector()
+
+    monkeypatch.setattr(
+        "smart_p1_sc.model_tool.create_detector", fake_create_detector
+    )
+    args = SimpleNamespace(
+        model=str(model),
+        image=str(image),
+        class_map="3=spaghetti,4=spaghetti",
+        class_count=9,
+        imgsz=320,
+        score_threshold=0.25,
+        nms_iou_threshold=0.45,
+    )
+    result = check_image(args)
+    assert result["candidate_count"] == 0
+    assert seen["config"].class_count == 9
+    assert seen["config"].class_map == {"3": "spaghetti", "4": "spaghetti"}
+
+
+def test_check_image_rejects_class_map_beyond_class_count(tmp_path):
+    model = tmp_path / "model.onnx"
+    model.write_bytes(b"model")
+    image = tmp_path / "test.jpg"
+    image.write_bytes(b"\xff\xd8x\xff\xd9")
+    args = SimpleNamespace(
+        model=str(model),
+        image=str(image),
+        class_map="3=spaghetti",
+        class_count=3,
+        imgsz=320,
+        score_threshold=0.25,
+        nms_iou_threshold=0.45,
+    )
+    with pytest.raises(ModelToolError) as error:
+        check_image(args)
+    assert error.value.code == "invalid_class_count"

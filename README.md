@@ -404,7 +404,17 @@ smart-p1sc-model check `
   --class-map "0=spaghetti,1=first_layer_detachment,2=structural_anomaly"
 ```
 
-`inspect` 会输出输入/输出形状和建议配置。当前 YOLOv8 3 类模型常见输出为 `[1, 7, 84]`，推荐 `output_format=cxcywh_class`、`box_coordinates=pixels`、`class_count=3`。
+如果模型包含多个类别，但只关心其中一部分，需要同时传入模型的总类别数：
+
+```powershell
+smart-p1sc-model check `
+  --model models\best.onnx `
+  --image .\test.png `
+  --class-count 9 `
+  --class-map "3=spaghetti,4=spaghetti,7=first_layer_detachment"
+```
+
+`--class-count` 用于正确解析模型输出；未提供时按 `class-map` 的最大索引推断。`inspect` 会输出输入/输出形状和建议配置。当前 YOLOv8 3 类模型常见输出为 `[1, 7, 84]`，推荐 `output_format=cxcywh_class`、`box_coordinates=pixels`、`class_count=3`。
 
 ### 部署
 
